@@ -1,0 +1,165 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE =~ /merge/'
+      when: 'never'
+    - when: always
+
+stages:
+  - lint
+  - build
+  - check
+  - deploy
+  - migrate
+
+image: docker:20-git
+
+variables:
+  APP_NAME: $CI_PROJECT_NAME-$CI_COMMIT_REF_NAME
+  APP_NS: $CI_PROJECT_NAME-$CI_COMMIT_REF_NAME
+  APP_COMMON_VERSION: 0.0.1
+  GIT_SUBMODULE_STRATEGY: recursive
+  GIT_STRATEGY: clone
+  ##KUBECONFIG: ~/.kube/config
+  HELM_UPGRADE_TIMEOUT: "10m"
+  DEBUG: "true"
+  #DOCKER_HOST: tcp://docker:2375/
+  #DOCKER_HOST: tcp://localhost:2375/
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_DRIVER: overlay2
+  ########## !changeme! ОСНОВНЫЕ ПЕРЕМЕННЫЕ, первым деплоить бек - у него docker-compose
+  CONTAINER_IMAGE: ${CI_REGISTRY_IMAGE}/${CI_PROJECT_NAME}_${CI_COMMIT_REF_NAME}
+  #########################################
+        
+build image:
+  extends: .build_docker
+  environment:
+    name: $CI_COMMIT_REF_NAME
+  variables:
+    container: docker
+
+Run safety:
+  extends: .check_code
+  script:
+    - mypy /home/app
+    - make safety
+  only:
+    refs:
+      - branches
+    changes:
+      - Makefile
+      - poetry.lock
+      - devops/build/common.dockerfile
+      - .gitlab-ci.yml
+  
+Run linters:
+  extends: .check_code
+  script:
+    - make lint
+
+Check formatting:
+  extends: .check_code
+  script: 
+    - make format-check
+    
+deploy_Helm:
+  timeout: 20 minutes
+  stage: deploy
+  image: gitlab.forkintech.ru:5050/bet/infra:latest
+  environment:
+    name: $CI_COMMIT_REF_NAME
+  variables:
+    APP_ENV_NAME: $CI_COMMIT_REF_NAME
+    KUBE_CONTEXT: bet/infra:k3s-agent
+  script:
+    - apk --no-cache add gettext 
+    - export
+    - kubectl config get-contexts
+    - kubectl config use-context bet/infra:k3s-agent
+    - kubectl get namespace | grep -c "${APP_NS}" || kubectl create namespace ${APP_NS}
+    - kubectl delete secret -n ${APP_NAME} regcred --ignore-not-found
+    - kubectl create secret -n ${APP_NAME} docker-registry regcred --docker-server=${CI_REGISTRY} --docker-username=${CI_DEPLOY_USER} --docker-password=${CI_DEPLOY_PASSWORD} --docker-email=${GITLAB_USER_EMAIL}
+    - /usr/local/bin/ep -v ./devops/helm/values-${CI_COMMIT_REF_NAME}.yaml
+    - cat ./devops/helm/values-${CI_COMMIT_REF_NAME}.yaml
+    - helm repo add nixys https://registry.nixys.ru/chartrepo/public
+    - helm template  --set name=${APP_NAME}
+                     --set env_name=${APP_ENV_NAME}
+                     --set env=${APP_ENV_NAME}
+                     --debug ${APP_NAME} -f ./devops/helm/values-${CI_COMMIT_REF_NAME}.yaml nixys/universal-chart > test.yaml 
+    ## FOR DEBUG
+    - cat test.yaml
+    - werf helm upgrade ${APP_NAME} nixys/universal-chart --install -n ${APP_NAME} -f ./devops/helm/values-${CI_COMMIT_REF_NAME}.yaml
+                --set env_name=${APP_ENV_NAME}  
+                --log-color-mode=on --add-annotation werf.io/show-service-messages=true 
+                --atomic --timeout ${HELM_UPGRADE_TIMEOUT} 
+                --wait 
+                --history-max 2 
+                --debug 
+    - kubectl get po,svc,ing
+  after_script:
+    - rm ./devops/helm/values-${CI_COMMIT_REF_NAME}.yaml test.yaml
+    - apk --no-cache add gettext 
+    - kubectl config get-contexts
+    - kubectl config use-context bet/infra:k3s-agent
+    ## Получаем название одного из подов api, чтобы вывести значения переменных окружения из контейнера api.
+    ## Выводим информацию о имеющихся объектах po,svc,ing
+    - kubectl get po,svc,ing -n ${APP_NS}
+    ## Переменные окружения в job'e помогут разработчикам дебажить работу приложения
+    - pod_name=$(kubectl get po -n ${APP_NS} -o name | grep ${APP_NAME}-api)
+    ## Выводим переменные окружения контейнера
+    - kubectl exec -n ${APP_NS} -it $pod_name -- sh -c export
+    ## Выводим url api, чтобы разработчик мог сразу открыть из job'ы .
+    - echo "Check it out"
+    - kubectl get ing -n ${APP_NS} -o json | jq '.items[]|.spec[]|.[]|.host = "http://\(.host)"|.host '
+
+.build_docker:
+  stage: build
+  timeout: 20 minutes
+  image: docker:20-git
+  when: always
+  environment:
+    name: $CI_COMMIT_REF_NAME
+  before_script:
+    - apt-get update && apt-get install -y bash openssh-client git docker.io
+    - mkdir -p /root/.ssh/
+  script:
+    - echo $CONTAINER_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker info
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    # - docker login -u $CI_DEPLOY_USER -p $CI_DEPLOY_PASSWORD $CI_REGISTRY
+    - docker build -t $CONTAINER_IMAGE:$CI_COMMIT_SHORT_SHA -f devops/build/common.dockerfile .
+    - docker push $CONTAINER_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker tag $CONTAINER_IMAGE:$CI_COMMIT_SHORT_SHA $CONTAINER_IMAGE:latest
+    - docker push $CONTAINER_IMAGE:latest
+
+.check_code:
+  only:
+    refs:
+      - branches
+  stage: check
+  allow_failure: true
+  before_script:
+#    - pip install poetry
+    - poetry config virtualenvs.create false
+    - poetry install
+  image: 
+    name: $CONTAINER_IMAGE:$CI_COMMIT_SHORT_SHA
+    entrypoint: [""]
+  interruptible: true
+
+
+.common-rules:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+.diff-prod-rules:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+    - if: '$CI_COMMIT_TAG'
+
+.deploy-prod-rules:
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: manual
