@@ -1,3 +1,12 @@
+import math
+import random
+import re
+import os
+import binascii
+
+import aiohttp
+
+
 RECORD_DELIM = ""
 FIELD_DELIM = ""
 HANDSHAKE_MESSAGE_DELIM = ""
@@ -408,14 +417,6 @@ def decrypt(text: str) -> str:
     #                             this._socket.removeEventListener("message", this.socketMessageHandshakeHandler),
     #                             this._socket = null)
     #                 },
-    #                 h.Counter = 5e6,
-    #                 h.TRAILING = "/zap/",
-    #                 h.CONNECTION_TIMEOUT_LIMIT = 15e3,
-    #                 h.HANDSHAKE_TIMEOUT_LIMIT = 15e3,
-    #                 h.HANDSHAKE_PROTOCOL = 35,
-    #                 h.HANDSHAKE_VERSION = 3,
-    #                 h.HANDSHAKE_CONNECTION_TYPE = 80,
-    #                 h.HANDSHAKE_CAPABILITIES_FLAG = 1,
     #                 h
     #         }(ns_gen5_events.EventDispatcher),
     #         e.WebsocketTransportMethod = o
@@ -461,6 +462,196 @@ this._socket.addEventListener("message", this.socketMessageDataHandler)
 """
 
 
+def get_locator_guid() -> str:
+    guid = ""
+
+    for idx in range(32):
+        guid += "%030x" % random.randrange(16**30)
+        if idx in (7, 11, 15, 19):
+            guid += "-"
+
+    return guid
+
+
+def load_page_data():
+    ...
+
+
+def get_filter_token(
+    country_code_64: str, country_state_64: str, country_group_64: str
+) -> re.Pattern:
+    return re.compile(
+        f"({country_code_64.replace('+', '\\+')}"
+        f"|{country_state_64.replace('+', '\\+')}"
+        f"|{country_group_64.replace('+', '\\+')})",
+        flags=re.IGNORECASE,
+    )
+
+
+def get_stem_filter_mode():
+    country_id = 123
+    country_state = 456
+
+    chars = [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "I",
+        "J",
+        "K",
+        "L",
+        "M",
+        "N",
+        "O",
+        "P",
+        "Q",
+        "R",
+        "S",
+        "T",
+        "U",
+        "V",
+        "W",
+        "X",
+        "Y",
+        "Z",
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+        "g",
+        "h",
+        "i",
+        "j",
+        "k",
+        "l",
+        "m",
+        "n",
+        "o",
+        "p",
+        "q",
+        "r",
+        "s",
+        "t",
+        "u",
+        "v",
+        "w",
+        "x",
+        "y",
+        "z",
+        "+",
+        "/",
+    ]
+    filters = []
+    current = 0
+    remains = 0
+    n = ""
+    some_i = "GD,GG,GI,GJ"
+    for idx in range(4096):
+        n = chars[current] + chars[remains]
+        if (idx + 1) % 64 == 0:
+            current += 1
+            remains = -1
+        filters.append(n)
+        remains += 1
+
+    country_code_64 = filters[1024 + country_id]
+    country_state_64 = filters[2048 + country_state]
+    phone_only_enabled = country_code_64 in some_i
+
+
+def get_subscribed_topics(subscribed_topics: list[str]) -> list[str]:
+    # getSubscribedPushTopics = function () {
+    #                     var e, t = [];
+    #                     for (e in this._subscribedTopics)
+    #                         "#" != e.charAt(0) && (t[t.length] = e);
+    #                     return t
+    #                 },
+
+    return [topic for topic in subscribed_topics if not topic.startswith("#")]
+
+
+def get_topic():
+    # connect = function () {
+    #                     var e, t, n, o, s, a, c;
+    #                     if (this._initialized || this._initialize(),
+    #                         !this._pendingConnect) {
+    #                         this.closeConnection(this._serverConnection),
+    #                             this._pendingConnect = true;
+    #                         for (e in this.subscriptionTimeouts)
+    #                             this.subscriptionTimeouts[e].stop(),
+    #                                 delete this.subscriptionTimeouts[e];
+    #                         for (t = this._serverConnection = new i,
+    #                             t.storageId = this.storageId,
+    #                             t.connectionListCycles = 1,
+    #                             n = (this.getCurrentTopics && this.getCurrentTopics() || []).join(","),
+    #                             o = 0,
+    #                             s = this.getConnectionDetails(); o < s.length; o++)
+    #                             a = s[o],
+    #                                 c = a.clone(),
+    #                                 c.transportMethod = g[c.transportMethodId] || r,
+    #                                 c.defaultTopic += 0 === n.length ? "" : "," + n,
+    #                                 t.addConnectionAttempt(c);
+    #                         this.openConnection(t)
+    #                     }
+    #                 }
+    ...
+
+
+def get_handshake_data():
+    """
+    h.prototype.getHandshakeData = function (t) {
+    var n, i = "";
+    return i += String.fromCharCode(h.HANDSHAKE_PROTOCOL),
+        i += String.fromCharCode(h.HANDSHAKE_VERSION),
+        i += String.fromCharCode(h.HANDSHAKE_CONNECTION_TYPE),
+        i += String.fromCharCode(h.HANDSHAKE_CAPABILITIES_FLAG),
+        null != this._connectionDetails.defaultTopic && (i += this._connectionDetails.defaultTopic + ","),
+        n = ns_gen5_util.CookieManager.GetSessionId(),
+        null == n ?
+        (this.dispatchEvent(new e.TransportConnectionEvent(e.TransportConnectionEvent.CONNECTION_FAILED_INVALID_SESSION)),
+            null) : (
+
+                i += "S_" + n, t && (i += ",A_" + t), i += String.fromCharCode(0)) },
+    """
+    counter = 5e6
+    TRAILING = "/zap/"
+    CONNECTION_TIMEOUT_LIMIT = 15e3
+    HANDSHAKE_TIMEOUT_LIMIT = 15e3
+    HANDSHAKE_PROTOCOL = 35
+    HANDSHAKE_VERSION = 3
+    HANDSHAKE_CONNECTION_TYPE = 80
+    HANDSHAKE_CAPABILITIES_FLAG = 1
+    topic = "P-ENDP"
+
+    handshake_data = ""
+    handshake_data += chr(HANDSHAKE_PROTOCOL)
+    handshake_data += chr(HANDSHAKE_VERSION)
+    handshake_data += chr(HANDSHAKE_CONNECTION_TYPE)
+    handshake_data += chr(HANDSHAKE_CAPABILITIES_FLAG)
+    handshake_data += f"{topic},"
+
+    session_id = "session_id"
+
+    return f"{handshake_data}S_{session_id},A_{topic}{chr(0)}"
+
+
 def handshake_callback(response: str):
     a = response.split(HANDSHAKE_MESSAGE_DELIM)
     c = a[0]
@@ -479,3 +670,84 @@ def handshake_callback(response: str):
     ns_gen5_net_url = "/zap"
     # wait for xcft event
     # has to do something with `/uicountersapi/increment`
+
+
+CONNECTION_SUCCESS = "100"
+CONNECTION_RECONNECT = "101"
+CONNECTION_REJECTED = "111"
+# t = "100",
+#             n = "111",
+#             i = "101",
+#             r = "102",
+
+"""
+SNAPSHOT = "F",
+                    e.UPDATE = "U",
+                    e.INSERT = "I",
+                    e.DELETE = "D",
+"""
+
+
+async def handshake(response: str) -> str:
+    """
+        h.prototype.handshakeCallback = function (response) {
+        // ##NOTE: This is the handshake callback
+        var request,
+            response_data = response.split(e.StandardProtocolConstants.HANDSHAKE_MESSAGE_DELIM),
+            first_header = response_data[0],
+            headers = first_header.split(e.StandardProtocolConstants.FIELD_DELIM);
+        if (this.clearConnectionTimeout(), headers[0] == t)
+            this._socket.removeEventListener("message", this.socketMessageHandshakeHandler),
+                this.setSocketReadyState(),
+                this._connected = true,
+                this._connectionID = headers[1],
+                this.dispatchEvent(new e.TransportConnectionEvent(e.TransportConnectionEvent.CONNECTED)),
+                this.log("Websocket connected as " + this._connectionID + ". " + this._connectionDetails);
+        else {
+            if (headers[0] != i)
+                return headers[0] == n ? void this.connectionFailed("connection rejected " + n) : void this.connectionFailed("connection rejected - unrecognised response");
+            this._connectionID = headers[1],
+                e.conId = this._connectionID.substring(0, this._connectionID.indexOf(e.StandardProtocolConstants.HANDSHAKE_MESSAGE_END_DELIM)),
+                ns_gen5_net.url = "/zap",
+                request = function (req) {
+                    if (this.xcftToken = req.detail, this.xcftToken) {
+                        e.conId = "",
+                            ns_gen5_net.url = "",
+                            window.removeEventListener("xcft" + this.instanceCounter, request);
+                        var handshake_data = this.getHandshakeData(this.xcftToken);
+                        this.sendHandshakeData(handshake_data)
+                    }
+                },
+                window.addEventListener("xcft" + this.instanceCounter, request),
+                window.dispatchEvent(new CustomEvent("xcftr", {
+                    detail: this.instanceCounter
+                }))
+        }
+        this._socket.addEventListener("message", this.socketMessageDataHandler)
+    }
+    """
+    response_data: list[str] = response.split(HANDSHAKE_MESSAGE_DELIM)
+    first_header: str = response_data[0]
+    headers = first_header.split(FIELD_DELIM)
+    status = headers[0]
+    if status == CONNECTION_SUCCESS:
+        print("Success")
+        connection_id = headers[1]
+        return connection_id
+        # TODO:  _connectionDetails
+    if status != CONNECTION_RECONNECT:
+        if status == CONNECTION_REJECTED:
+            print("Connection rejected")
+        else:
+            print("Connection rejected - unrecognised response")
+        return
+    
+    connection_id = headers[1]
+    configuration_id = connection_id.split(HANDSHAKE_MESSAGE_END_DELIM)[0]
+    url = "/zap"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            print(resp.status)
+            print(await resp.text())
+
+    

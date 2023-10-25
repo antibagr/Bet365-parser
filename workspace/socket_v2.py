@@ -226,8 +226,8 @@ class WSClient:
     def _re_nst_token_feom_page_source(self, page_source):
         with open("page_source.html", "w", encoding="utf-8") as f:
             f.write(page_source)
-        pattern1 = re.compile("var[\s]+order[\s]*=[\s]*\[\\\'.*?\\\'\];")
-        pattern2 = re.compile("var[\s]+loadingflags[\s]*=[\s]*\[\\\'.*?\\\'\];")
+        pattern1 = re.compile("var[\s]+order[\s]*=[\s]*\[\\'.*?\\'\];")
+        pattern2 = re.compile("var[\s]+loadingflags[\s]*=[\s]*\[\\'.*?\\'\];")
         # pattern1 = re.compile("d\[b\(\\'0x1\\'\)\][\s]*=[\s]*\\'.*?\\'[\s]*;")
         # pattern2 = re.compile("d\[b\(\\'0x0\\'\)\][\s]*=[\s]*\\'.*?\\'[\s]*;")
         r1 = pattern1.findall(page_source)

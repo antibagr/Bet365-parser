@@ -2992,6 +2992,7 @@ var ns_test, ns_gen5_util, ErrorReporter, __decorate, __param, __spreadArrays, _
                         e
                 }
                 return __extends(o, n),
+                // NOTE: Get xcft from API
                     o.prototype.load = function (n, s) {
                         var a, c = this;
                         void 0 === s && (s = {}),
@@ -8750,6 +8751,7 @@ var ns_test, ns_gen5_util, ErrorReporter, __decorate, __param, __spreadArrays, _
                             }, h.HANDSHAKE_TIMEOUT_LIMIT)) : this.close()
                     },
                     h.prototype.handshakeCallback = function (r) {
+                        // ##NOTE: This is the handshake callback
                         var o, s = this,
                             a = r.split(e.StandardProtocolConstants.HANDSHAKE_MESSAGE_DELIM),
                             c = a[0],
