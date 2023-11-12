@@ -1,40 +1,44 @@
-import asyncio
 import typing as t
 
 import attrs
-from loguru import logger
 
-from app.dto.annotations import APIData
-from app.dto.entities.feed import FeedEvent
-from app.repository.events import EventsRepo
+from app.dto.entities.websocket import WebSocketPayload
+from app.dto.entities.update import Update
 from app.services._base_live_service import BaseLiveEventsService
 
 
-class FetcherInterface(t.Protocol):
-    async def fetch_events(self) -> APIData:
+class InterceptorInterface(t.Protocol):
+    def intercept(self) -> t.AsyncGenerator[bytes, None]:
         ...
 
 
-class ParserInterface(t.Protocol):
-    def parse_events(self, /, data: APIData) -> t.AsyncGenerator[FeedEvent, None]:
+class WebSocketDataParserInterface(t.Protocol):
+    async def parse(self, /, data: bytes) -> WebSocketPayload | None:
+        ...
+
+
+class DataParserInterface(t.Protocol):
+    def parse(self, /, payload: WebSocketPayload) -> Update | None:
+        ...
+
+
+class UpdatesRepositoryInterface(t.Protocol):
+    async def add(self, /, update: Update) -> None:
         ...
 
 
 @t.final
 @attrs.define(slots=True, frozen=False, kw_only=True)
 class Bet365LiveEventsService(BaseLiveEventsService):
-    _fetcher: FetcherInterface
-    _parser: ParserInterface
-    _events_repo: EventsRepo
+    _interceptor: InterceptorInterface
+    _websocket_parser: WebSocketDataParserInterface
+    _data_parser: DataParserInterface
+    _updates_repo: UpdatesRepositoryInterface
 
     async def _process(self) -> None:
-        try:
-            logger.debug("Fetching events...")
-            data = await self._fetcher.fetch_events()
-        except Exception as exc:
-            logger.exception(str(exc))
-            data = {"events": []}
-        async for feed_event in self._parser.parse_events(data=data):
-            if feed_event is not None:
-                logger.info(f"Sending event {feed_event.name}")
-                asyncio.create_task(self._events_repo.put(feed_event))
+        async for data in self._interceptor.intercept():
+            async for payload in self._websocket_parser.parse(data):
+                update = await self._data_parser.parse(payload)
+                if update is None:
+                    continue
+                await self._updates_repo.add(update)

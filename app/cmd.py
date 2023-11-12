@@ -48,7 +48,7 @@ async def run_parsers() -> None:
     async with application_dependencies():
         await asyncio.gather(
             bet_365_live_events_service.process(),
-            liveness_probe_service.serve_liveness(port=settings.LIVENESSPROBEPORT),
+            liveness_probe_service.serve_liveness(port=settings.LIVENESS_PROBE_PORT),
         )
 
 

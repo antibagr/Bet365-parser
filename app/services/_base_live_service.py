@@ -7,14 +7,8 @@ from loguru import logger
 
 @attrs.define(slots=True, frozen=False, kw_only=True)
 class BaseLiveEventsService:
-    _update_interval_sleep_range: tuple[int, int]
     _is_alive: bool = attrs.field(default=True, init=False)
     _is_started: bool = attrs.field(default=False, init=False)
-
-    async def _retry_sleep(self) -> None:
-        tts = random.randint(*self._update_interval_sleep_range) + random.random()
-        logger.debug(f"Sleeping for {tts:.1f} seconds...")
-        await asyncio.sleep(tts)
 
     async def process(self) -> None:
         try:
@@ -26,7 +20,6 @@ class BaseLiveEventsService:
                 except Exception as exc:
                     self._is_alive = False
                     logger.exception(str(exc))
-                await self._retry_sleep()
         finally:
             self._is_started = False
 

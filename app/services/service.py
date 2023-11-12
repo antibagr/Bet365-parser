@@ -1,37 +1,39 @@
 import typing as t
 from contextlib import asynccontextmanager
 
-from app.repository.bet365 import Bet365FetcherRepo, Bet365ParserRepo, DummyBet365FetcherRepo
-from app.repository.bet_cache import InMemoryCache
-from app.repository.events import EventsRepo
+from app.repository.updates import UpdatesRepository
 from app.services.bet365 import Bet365LiveEventsService
 from app.services.liveness_probe import LivenessProbeInterface, LivenessProbeSrv
 from app.settings import settings
-
-# Dependencies layer
-cache = InMemoryCache()
+from app.repository.db import DB
+from app.utils import setup_logging
+from app.repository.interceptor import InterceptorRepository, WebSocketDataParserRepository
+from app.repository.parser import DataParserRepository, SportManager, BetParser
 
 # Repository Layer
-_fetcher_kw = {"response_file_path_pattern": settings.RESPONSE_FILE_PATH_PATTERN}
-
-if settings.is_production:
-    bet_365_fetcher = Bet365FetcherRepo(**_fetcher_kw)
-else:
-    bet_365_fetcher = DummyBet365FetcherRepo(**_fetcher_kw)  # type: ignore[assignment]
-
-bet_365_parser = Bet365ParserRepo(cache=cache)
-
-events_repo = EventsRepo()
+db = DB(
+    json_db_path=settings.JSON_DB_PATH,
+)
+interceptor_repo = InterceptorRepository(
+    source_ip=settings.SOURCE_IP,
+    interceptor_kw=settings.INTERCEPTOR_KW,
+)
+websocket_data_parser_repo = WebSocketDataParserRepository()
+data_parser_repo = DataParserRepository(
+    bet_parser=BetParser(db=db),
+    sport_manager=SportManager(db=db),
+    storage=db,
+)
+updates_repo = UpdatesRepository(storage=db)
 
 
 # Service Layer
 bet_365_live_events_service = Bet365LiveEventsService(
-    fetcher=bet_365_fetcher,
-    parser=bet_365_parser,
-    events_repo=events_repo,
-    update_interval_sleep_range=settings.UPDATE_INTERVAL_SLEEP_RANGE,
+    interceptor=interceptor_repo,
+    websocket_data_parser=websocket_data_parser_repo,
+    storage=db,
+    data_parser=data_parser_repo,
 )
-
 liveness_probe_resources: list[LivenessProbeInterface] = [
     bet_365_live_events_service,
 ]
@@ -39,11 +41,12 @@ liveness_probe_service = LivenessProbeSrv(resources=liveness_probe_resources)
 
 
 async def startup() -> None:
-    await cache.start()
+    setup_logging()
+    await db.connect()
 
 
 async def shutdown() -> None:
-    await cache.stop()
+    await db.disconnect()
 
 
 @asynccontextmanager

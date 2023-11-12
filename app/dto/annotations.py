@@ -1,6 +1,3 @@
 import typing as t
 
-from app.dto.entities.feed import FeedBet
-
-APIData: t.TypeAlias = dict[str, t.Any]
-BetsGenerator: t.TypeAlias = t.Generator[FeedBet, None, None]
+Serializable: t.TypeAlias = t.Union[str, int, float, bool, None, list[t.Any], dict[str, t.Any]]
