@@ -1,4 +1,4 @@
-from .json_db import JsonDB
+from app.repository.db.json import JsonDB
 
 
 class DB(

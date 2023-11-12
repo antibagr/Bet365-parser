@@ -7,37 +7,23 @@ maintainers = ["Anthony Bagrianov <rudiemeant@gmail.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.12.0"
+pydantic-settings = "2.0.3"
+pyshark = "0.6"
 uvloop = {version = "0.19.0", markers = "sys_platform == 'linux' or sys_platform == 'darwin'"}
+pydantic = "2.4.2"
 loguru = "0.7.2"
-websocket-client = "^1.6.4"
-websockets = "^12.0"
-requests = "^2.31.0"
-selenium = "^4.14.0"
-soccerapi = "^0.8.0"
-undetected-chromedriver = "^3.5.3"
-seleniumbase = "^4.20.6"
-pyshark = "^0.6"
-pydantic = "^2.4.2"
-pydantic-settings = "^2.0.3"
-aiofiles = "^23.2.1"
+attrs = "23.1.0"
+
+[tool.poetry.group.db-json.dependencies]
+aiofiles = "23.2.1"
 
 [tool.poetry.group.dev.dependencies]
-autopep8 = "2.0.1"
-bandit = {extras = ["toml"], version = "1.7.5"}
-black = "23.1.0"
-coverage = "7.2.0"
-flake8 = "6.0.0"
-flake8-bugbear = "23.2.13"
-flake8-print = "5.0.0"
-flake8-pytest-style = "1.7.2"
-flake8-simplify = "0.19.3"
-flake8-unused-arguments = "0.0.13"
+black = "23.11.0"
 isort = "5.12.0"
-pytest-asyncio = "0.20.3"
-mypy = "1.4.1"
-flake8-comments = "0.1.2"
-aiofiles = "23.2.1"
-ipykernel = "^6.25.2"
+flake8 = "6.1.0"
+mypy = "1.7.0"
+bandit = {extras = ["toml"], version = "1.7.5"}
+types-aiofiles = "23.2.0.0"
 
 [tool.black]
 line-length = 100
@@ -71,6 +57,12 @@ check_untyped_defs = true
 no_implicit_reexport = true
 namespace_packages = true
 exclude = []
+
+[[tool.mypy.overrides]]
+module = [
+    "pyshark.*",
+]
+ignore_missing_imports = true
 
 [tool.bandit]
 skips = [

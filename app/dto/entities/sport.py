@@ -1,48 +1,69 @@
 import typing as t
-from pydantic import BaseModel, model_serializer, Field
 
+from pydantic import Field, model_serializer
+
+from app.dto.entities.base import BaseModel
+from app.dto.exceptions import EmptyFieldException
 from app.utils import get_esport_id
 
 
+@t.final
 class Sport(BaseModel):
     id: str | None = None
     name: str | None = None
 
+    @property
+    def sport_id(self) -> str:
+        if self.id:
+            return self.id
+        raise EmptyFieldException(field="sport_id")
 
+
+@t.final
 class ESport(BaseModel):
     sport: Sport
 
     @property
-    def id(self) -> str:
-        return get_esport_id(self.sport.id)
+    def id(self) -> str | None:
+        if self.sport.id:
+            return get_esport_id(self.sport.id)
+        return None
 
     @property
     def name(self) -> str:
         if self.sport.name:
             return f"ESport {self.sport.name}"
-        return f"ESport id({self.sport.id})"
+        return f"ESport id({self.id or 'unknown'})"
+
+    @property
+    def sport_id(self) -> str:
+        return self.sport.sport_id
 
     @model_serializer
     def ser_model(self) -> str:
         return self.name
 
     if t.TYPE_CHECKING:
-        # Ensure type checkers see the correct return type
-        def model_dump(
+
+        def model_dump(  # type: ignore[override]
             self,
             *,
-            mode: t.Literal["json", "python"] | str = "python",
-            include: t.Any = None,
-            exclude: t.Any = None,
-            by_alias: bool = False,
-            exclude_unset: bool = False,
-            exclude_defaults: bool = False,
-            exclude_none: bool = False,
-            round_trip: bool = False,
-            warnings: bool = True,
+            mode: t.Literal["json", "python"] | str = "python",  # noqa: U100
+            include: t.Any = None,  # noqa: U100
+            exclude: t.Any = None,  # noqa: U100
+            by_alias: bool = False,  # noqa: U100
+            exclude_unset: bool = False,  # noqa: U100
+            exclude_defaults: bool = False,  # noqa: U100
+            exclude_none: bool = False,  # noqa: U100
+            round_trip: bool = False,  # noqa: U100
+            warnings: bool = True,  # noqa: U100
         ) -> str:
             ...
 
 
+AnySport: t.TypeAlias = t.Union[Sport, ESport]
+
+
+@t.final
 class Sports(BaseModel):
-    sports: dict[str, Sport | ESport] = Field(default_factory=dict)
+    sports: dict[str, AnySport] = Field(default_factory=dict)

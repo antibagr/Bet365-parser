@@ -31,7 +31,7 @@ def cli() -> None:
     ...
 
 
-def handle_exit_signal(sig, frame) -> t.NoReturn:
+def handle_exit_signal(_sig, _frame) -> t.NoReturn:
     raise SystemExit
 
 

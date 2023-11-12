@@ -12,7 +12,6 @@ install: ## Install project dependencies
 
 format: ## Format the source code
 	poetry run black $(SOURCES)
-	poetry run autopep8 $(SOURCES)
 	poetry run isort $(SOURCES)
 .PHONY: format
 

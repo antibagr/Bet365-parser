@@ -2,12 +2,10 @@ import typing as t
 
 import attrs
 import pyshark
-from pyshark.packet.packet import Packet
-from pyshark.packet.layers.xml_layer import XmlLayer as Layer
-from pyshark.capture.capture import TSharkCrashException
-
 from loguru import logger
-
+from pyshark.capture.capture import TSharkCrashException
+from pyshark.packet.layers.xml_layer import XmlLayer as Layer
+from pyshark.packet.packet import Packet
 
 logger.bind(context="interceptor")
 
@@ -16,14 +14,14 @@ class EmptyPacket(Exception):
     pass
 
 
-class WebSocketPacketProcessorInterface:
-    def process(self, packet: Packet) -> None:
-        raise NotImplementedError
+class WebSocketPacketProcessorInterface(t.Protocol):
+    def process(self, packet: Packet) -> None:  # noqa: U100
+        ...
 
 
 @t.final
 @attrs.define(slots=True, frozen=True, kw_only=True)
-class InterceptorRepository():
+class InterceptorRepository:
     _source_ip: str
     _interceptor_kw: dict[str, t.Any]
 
@@ -44,13 +42,14 @@ class InterceptorRepository():
                 logger.debug(ws_layer)
             else:
                 return data
+        return None
 
     async def intercept(self) -> t.AsyncGenerator[bytes, None]:
         try:
             capture = pyshark.LiveCapture(**self._interceptor_kw)
             for packet in capture:
-                    data = await self._process_packet(packet)
-                    if data:
-                        yield data
+                data = await self._process_packet(packet)
+                if data:
+                    yield data
         except (OSError, KeyboardInterrupt, TSharkCrashException):
             ...

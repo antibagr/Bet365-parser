@@ -2,7 +2,10 @@ import pydantic
 
 
 class BaseModel(pydantic.BaseModel):
-    class Config:
-        extra = "allow"
-        allow_mutation = False
-        validate_assignment = True
+    model_config = pydantic.ConfigDict(
+        validate_assignment=True,
+    )
+
+    @property
+    def is_empty(self) -> bool:
+        return None in self.model_dump(warnings=False).values()

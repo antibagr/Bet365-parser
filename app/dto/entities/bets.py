@@ -1,10 +1,16 @@
-from app.dto.entities.base import BaseModel
+import typing as t
 
+from pydantic import ConfigDict
+
+from app.dto.entities.base import BaseModel
 from app.dto.enums import BetType
 
 
-class Bet(BaseModel, extra="allow"):
+@t.final
+class Bet(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     id: str
     event_id: str
-    odds: float
+    odds: str
     bet_type: BetType

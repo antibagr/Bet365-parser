@@ -1,23 +1,27 @@
-from pydantic_settings import BaseSettings
-from pydantic import FilePath
-
 import typing as t
+
+from pydantic import FilePath
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+    )
+
     ENVIRONMENT: str
-    DEBUG: bool = False
-
-    KEYLOG_FILE_PATH: FilePath = r"C:\Users\RapRocket\SSLKEYS\sslkeylog.log"
-    JSON_DB_PATH: FilePath = "db.json"
+    DEBUG: bool
     SOURCE_IP: str
-
-    LIVENESS_PROBE_PORT: int = 8080
+    KEYLOG_FILE_PATH: FilePath
+    JSON_DB_PATH: FilePath
+    LIVENESS_PROBE_PORT: int
 
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "prod"
-    
+
     @property
     def INTERCEPTOR_KW(self) -> dict[str, t.Any]:
         return {
@@ -27,4 +31,4 @@ class Settings(BaseSettings):
         }
 
 
-settings = Settings()
+settings = Settings(_env_file=".env")  # type: ignore[call-arg]

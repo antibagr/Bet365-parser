@@ -1,25 +1,33 @@
-from app.dto.entities.base import BaseModel
-from pydantic import Field
-from collections import defaultdict
 import datetime as dt
+import typing as t
+from collections import defaultdict
 
+from pydantic import Field
+
+from app.dto.entities.base import BaseModel
 from app.dto.entities.bets import Bet
+from app.dto.entities.sport import AnySport, Sport
+from app.dto.exceptions import EmptyFieldException
 
+
+@t.final
 class Event(BaseModel):
     id: str | None = None
     league: str | None = None
     name: str | None = None
-    image: str | None = None
     team_1: str | None = None
     team_2: str | None = None
-    sport: str | None = None
+    sport: AnySport = Field(default_factory=Sport)
     event_dt: dt.datetime | None = None
-    bets: dict[str, list[Bet]] = Field(default_factory=defaultdict(list))
+    bets: t.DefaultDict[str, list[Bet]] = Field(default_factory=lambda: defaultdict(list))
 
     @property
-    def is_empty(self) -> bool:
-        return None in self
-    
+    def event_id(self) -> str:
+        if self.id:
+            return self.id
+        raise EmptyFieldException(field="event_id")
 
+
+@t.final
 class Events(BaseModel):
-    events: dict[str, Event] = Field(default_factory=defaultdict(Event))
+    events: t.DefaultDict[str, Event] = Field(default_factory=lambda: defaultdict(Event))

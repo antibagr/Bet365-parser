@@ -28,3 +28,11 @@ class BetType(enum.StrEnum):
     Totals = "Totals"
     Handicap = "Handicap"
     Unknown = "Unknown"
+
+
+@t.final
+@enum.unique
+class UpdateType(enum.StrEnum):
+    SPORT = "sport"
+    EVENT = "event"
+    BET = "bet"

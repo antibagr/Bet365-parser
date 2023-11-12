@@ -1,9 +1,12 @@
 import asyncio
 import typing as t
+from unittest import mock
 
 import attrs
-from aiohttp import web
 from loguru import logger
+
+# NOTE: (a.bagrianov): Wait for the aiohttp to support Python 3.12
+web = mock.Mock()
 
 
 class LivenessProbeInterface(t.Protocol):
@@ -25,7 +28,7 @@ class LivenessProbeSrv:
         Expose a /health endpoint that returns 200 if all resources are alive, 503 otherwise.
         """
 
-        async def _get_healthcheck(_: web.Request) -> web.Response:
+        async def _get_healthcheck(_):
             _app_status = await self.is_alive()
             logger.info(f"Liveness probe request received: {_app_status}")
             if _app_status:

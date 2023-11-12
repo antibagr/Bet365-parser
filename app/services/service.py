@@ -1,14 +1,14 @@
 import typing as t
 from contextlib import asynccontextmanager
 
+from app.repository.db import DB
+from app.repository.interceptor import InterceptorRepository, WebSocketDataParserRepository
+from app.repository.parser import BetParser, DataParserRepository, SportManager
 from app.repository.updates import UpdatesRepository
 from app.services.bet365 import Bet365LiveEventsService
 from app.services.liveness_probe import LivenessProbeInterface, LivenessProbeSrv
 from app.settings import settings
-from app.repository.db import DB
 from app.utils import setup_logging
-from app.repository.interceptor import InterceptorRepository, WebSocketDataParserRepository
-from app.repository.parser import DataParserRepository, SportManager, BetParser
 
 # Repository Layer
 db = DB(
@@ -29,10 +29,10 @@ updates_repo = UpdatesRepository(storage=db)
 
 # Service Layer
 bet_365_live_events_service = Bet365LiveEventsService(
-    interceptor=interceptor_repo,
-    websocket_data_parser=websocket_data_parser_repo,
-    storage=db,
-    data_parser=data_parser_repo,
+    data_parser_repo=data_parser_repo,
+    interceptor_repo=interceptor_repo,
+    updates_repo=updates_repo,
+    websocket_data_parser_repo=websocket_data_parser_repo,
 )
 liveness_probe_resources: list[LivenessProbeInterface] = [
     bet_365_live_events_service,
