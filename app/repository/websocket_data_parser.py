@@ -18,7 +18,7 @@ class WebSocketDataParserRepository:
         _msg_type, *records = message.split("|")
 
         for nodes in records:
-            payload: WebSocketPayload = defaultdict(None)
+            payload: WebSocketPayload = defaultdict(lambda: None)
             node_type = None
             for node in nodes.split(";"):
                 key, *val = node.split("=")
@@ -26,8 +26,6 @@ class WebSocketDataParserRepository:
                     continue
                 node_type = node_type or key
                 payload[key] = val[0]
-
-            logger.debug(payload)
 
             yield payload
 
@@ -46,7 +44,7 @@ class WebSocketDataParserRepository:
             if message[0] != WebSocketMessageType.DELTA:
                 raise ValueError(f"Invalid message type: {data!r}")
 
-            event_id, updates = message[1:].split(b"\x01")
+            _event_id, updates = message[1:].split(b"\x01")
 
             update_type, data, _end = updates.split(b"|")
 
@@ -55,15 +53,11 @@ class WebSocketDataParserRepository:
             if update_type != b"U":
                 logger.debug(f"NOT AN UPDATE: {formatted_data=}")
 
-            logger.info(
-                f"{event_id.decode('utf-8')} -> {updates.decode('utf-8')} -> {formatted_data}"
-            )
-
     async def parse(self, /, data: bytes) -> t.AsyncGenerator[WebSocketPayload, None]:
         SUBSCRIBE_ACTION = 4
 
         if data.startswith(constants.UPDATE_DATA_DELIM):
-            await self.parse_update(data)
+            # await self.parse_update(data)
             return
 
         for msg in data.split(constants.MESSAGE_DELIM):
@@ -73,6 +67,7 @@ class WebSocketDataParserRepository:
                     records = msg.split(constants.RECORD_DELIM)
                     message = msg[len(records[0]) + 1 :]
 
+                    logger.debug("Process ws data")
                     async for payload in self.stream_payloads(message=message.decode("utf-8")):
                         yield payload
 

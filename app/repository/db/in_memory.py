@@ -37,15 +37,21 @@ class InMemoryDB(BaseDB):
                     (await self.get_events())[bet.event_id].bets[bet.bet_type].append(bet)
             case UpdateType.SPORT:
                 sport: AnySport = t.cast(AnySport, update.data)
-                if not sport.is_empty:
-                    (await self.get_sports())[sport.sport_id] = sport
+                await self.add_sport(sport)
             case _:
                 raise KeyError(f"Unknown update key: {update.key}")
 
     async def add_sport(self, sport: AnySport) -> None:
-        if not sport.id:
+        if sport.id is None:
             return
-        (await self.get_sports())[sport.sport_id] = sport
+        sports = await self.get_sports()
+        if isinstance(sport, ESport):
+            sports[sport.sport_id] = sport
+        else:
+            if sport.sport_id in sports:
+                sports[sport.sport_id].name = sport.name  # type: ignore[misc]
+            else:
+                sports[sport.sport_id] = sport
 
     async def get_event(self, event_id: str) -> Event:
         return (await self.get_events())[event_id]

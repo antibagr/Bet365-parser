@@ -1,22 +1,26 @@
 import typing as t
 from contextlib import asynccontextmanager
 
+from app.lib.wireshark import WireSharkInterCeptor
 from app.repository.db import DB
-from app.repository.interceptor import InterceptorRepository, WebSocketDataParserRepository
 from app.repository.parser import BetParser, DataParserRepository, SportManager
 from app.repository.updates import UpdatesRepository
+from app.repository.websocket_data_parser import WebSocketDataParserRepository
 from app.services.bet365 import Bet365LiveEventsService
 from app.services.liveness_probe import LivenessProbeInterface, LivenessProbeSrv
 from app.settings import settings
 from app.utils import setup_logging
 
+# Dependency Layer
+
+interceptor = WireSharkInterCeptor(
+    source_ip=settings.SOURCE_IP,
+    interceptor_parameters=settings.INTERCEPTOR_KW,
+)
+
 # Repository Layer
 db = DB(
     json_db_path=settings.JSON_DB_PATH,
-)
-interceptor_repo = InterceptorRepository(
-    source_ip=settings.SOURCE_IP,
-    interceptor_kw=settings.INTERCEPTOR_KW,
 )
 websocket_data_parser_repo = WebSocketDataParserRepository()
 data_parser_repo = DataParserRepository(
@@ -30,7 +34,7 @@ updates_repo = UpdatesRepository(storage=db)
 # Service Layer
 bet_365_live_events_service = Bet365LiveEventsService(
     data_parser_repo=data_parser_repo,
-    interceptor_repo=interceptor_repo,
+    interceptor=interceptor,
     updates_repo=updates_repo,
     websocket_data_parser_repo=websocket_data_parser_repo,
 )

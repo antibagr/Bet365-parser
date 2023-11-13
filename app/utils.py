@@ -1,5 +1,5 @@
+import math
 import sys
-from decimal import Decimal
 
 from loguru import logger
 
@@ -23,14 +23,14 @@ def get_esport_id(sport_id: str) -> str:
     return f"x{sport_id}"
 
 
-def fractional_odds_to_decimal(odds: str) -> Decimal:
+def fractional_odds_to_decimal(odds: str) -> float:
     if "/" not in odds:
         raise ValueError(f"Invalid odds: {odds}")
     numerator, denominator = odds.split("/")
     if denominator == "0":
-        return Decimal(0)
-    return (Decimal(numerator) / Decimal(denominator)) + 1
+        return float(0)
+    return int(numerator) / int(denominator) + 1
 
 
-def decimal_to_str(dec: Decimal) -> str:
+def number_to_string(dec: float) -> str:
     return "{0:.2f}".format(dec)

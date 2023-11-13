@@ -14,7 +14,7 @@ class Sport(BaseModel):
 
     @property
     def sport_id(self) -> str:
-        if self.id:
+        if self.id is not None:
             return self.id
         raise EmptyFieldException(field="sport_id")
 
@@ -37,15 +37,20 @@ class ESport(BaseModel):
 
     @property
     def sport_id(self) -> str:
-        return self.sport.sport_id
+        if self.sport.id is not None:
+            return get_esport_id(self.sport.id)
+        raise EmptyFieldException(field="sport_id")
 
     @model_serializer
-    def ser_model(self) -> str:
-        return self.name
+    def ser_model(self) -> dict[str, t.Any]:
+        return {
+            "id": self.sport_id,
+            "name": self.name,
+        }
 
     if t.TYPE_CHECKING:
 
-        def model_dump(  # type: ignore[override]
+        def model_dump(
             self,
             *,
             mode: t.Literal["json", "python"] | str = "python",  # noqa: U100
@@ -57,7 +62,7 @@ class ESport(BaseModel):
             exclude_none: bool = False,  # noqa: U100
             round_trip: bool = False,  # noqa: U100
             warnings: bool = True,  # noqa: U100
-        ) -> str:
+        ) -> dict[str, t.Any]:
             ...
 
 

@@ -1,7 +1,9 @@
 import json
+import uuid
 from os import PathLike
 
 import aiofiles
+from loguru import logger
 
 from app.dto.entities.event import Event
 from app.dto.entities.sport import AnySport
@@ -17,10 +19,16 @@ class JsonDB(InMemoryDB):
 
     async def save(self) -> None:
         sports: list[AnySport] = list((await self.get_sports()).values())
-        events: dict[str, Event] = await self.get_events()
+        events: list[Event] = (await self.get_events()).values()
         serializable = {
-            "_sports": [sport.model_dump_json() for sport in sports],
-            **{event.event_id: event.model_dump_json() for event in events.values() if event.id},
+            event.id or uuid.uuid4().hex: json.loads(event.model_dump_json(exclude_none=True))
+            for event in events
         }
-        async with aiofiles.open(self._json_db_path, mode="w") as f:
+        serializable["#__sports"] = {
+            sport.sport_id: sport.name for sport in sports if sport.id is not None
+        }
+
+        logger.info(f"Saving {len(sports)} sports and {len(events)} events to {self._json_db_path}")
+
+        async with aiofiles.open(self._json_db_path, mode="w", encoding="utf-8") as f:
             await f.write(json.dumps(serializable, indent=4, sort_keys=True))

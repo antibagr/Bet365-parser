@@ -5,13 +5,14 @@ import attrs
 from loguru import logger
 
 from app.dto.annotations import WebSocketPayload
+from app.dto.constants import NoSport
 from app.dto.entities.bets import Bet
 from app.dto.entities.event import Event
 from app.dto.entities.sport import AnySport, ESport, Sport
 from app.dto.entities.update import Update
 from app.dto.enums import BetType, UpdateType
 from app.repository.db.db import DB
-from app.utils import decimal_to_str, fractional_odds_to_decimal, get_esport_id
+from app.utils import fractional_odds_to_decimal, get_esport_id, number_to_string
 
 logger.bind(context="data_parser")
 
@@ -21,7 +22,7 @@ class SportManager:
         self._db = db
 
     async def get_esport(self, sport_id: str | None) -> AnySport | None:
-        if not sport_id:
+        if sport_id is None:
             return None
 
         esport_id = get_esport_id(sport_id)
@@ -31,11 +32,11 @@ class SportManager:
             sport = await self._db.get_sport(sport_id)
             if sport is None:
                 raise RuntimeError(f"Sport {sport_id} not found")
-            await self._db.add_sport(sport=ESport(sport=sport))
+            await self._db.add_sport(ESport(sport=sport))
         return await self._db.get_esport(esport_id)
 
     async def get_sport(self, sport_id: str | None) -> Sport | None:
-        if not sport_id:
+        if sport_id is None:
             return None
 
         if not await self._db.sport_exists(sport_id):
@@ -56,7 +57,7 @@ class BetParser:
             case _:
                 total_type = "Unknown"
 
-        if not payload["HA"] == payload["HD"].strip():  # type: ignore[union-attr]
+        if not float(payload["HA"]) == float(payload["HD"].strip()):  # type: ignore[union-attr]
             logger.warning(f"Total {payload['HA']=} != {payload['HD']=}")
             raise ValueError(f"Total {payload['HA']=} != {payload['HD']=}")
 
@@ -64,10 +65,14 @@ class BetParser:
         event_id = t.cast(str, payload["FI"])
         odds = t.cast(str, payload["OD"])
 
+        if None in (bet_id, event_id, odds):
+            logger.warning(f"Invalid bet {payload}")
+            return None
+
         return Bet(  # type: ignore[call-arg]
             id=bet_id,
             event_id=event_id,
-            odds=decimal_to_str(fractional_odds_to_decimal(odds)),
+            odds=number_to_string(fractional_odds_to_decimal(odds)),
             bet_type=BetType.Totals,
             total=total_type,
             value=payload["HA"],
@@ -88,16 +93,20 @@ class BetParser:
         event_id = t.cast(str, payload["FI"])
         odds = t.cast(str, payload["OD"])
 
+        if None in (bet_id, event_id, odds):
+            logger.warning(f"Invalid bet {payload}")
+            return None
+
         return Bet(  # type: ignore[call-arg]
             id=bet_id,
             event_id=event_id,
-            odds=decimal_to_str(fractional_odds_to_decimal(odds)),
+            odds=number_to_string(fractional_odds_to_decimal(odds)),
             bet_type=BetType.Results,
             team=team,
         )
 
     async def get_bet(self, payload: WebSocketPayload) -> Bet | None:
-        if payload["HD"]:
+        if payload["HD"] is not None:
             return await self.get_totals(payload=payload)
         else:
             return await self.get_results(payload=payload)
@@ -116,24 +125,29 @@ class DataParserRepository:
         else:
             sport = await self._sport_manager.get_sport(sport_id)
         if sport is None:
-            raise RuntimeError(f"Sport {sport_id} not found")
+            logger.warning(f"Sport {sport_id} not found")
+            sport = NoSport
         return sport
 
     async def get_event(self, /, payload: WebSocketPayload) -> Event | None:
         league = payload["CT"]
         event_name = payload["AC"]
         teams = t.cast(str, payload["NA"])
+        team_1, team_2 = "", ""
         for sep in (" v ", " vs ", " @ "):
             try:
                 team_1, team_2 = teams.split(sep)
                 break
             except (ValueError, AttributeError):
-                logger.warning(f"Can't split {teams=} by {sep=}")
-                return None
+                ...
+
+        if not team_1 or not team_2:
+            logger.warning(f"Can't split {teams=} by any separator")
+            return None
 
         sport = await self._get_sport(sport_id=payload["OR"], team_1=team_1, team_2=team_2)
 
-        if payload["TU"]:
+        if payload["TU"] is not None:
             event_dt = dt.datetime.strptime(payload["TU"], "%Y%m%d%H%M%S")
         else:
             logger.debug(f"No event date {payload=}")
@@ -156,12 +170,12 @@ class DataParserRepository:
 
         sport_id = payload["OR"]
 
-        if not sport_id:
+        if sport_id is None:
             raise ValueError("No sport ID")
 
         sports = await self._storage.get_sports()
 
-        if sport_id in sports or sports[sport_id].name is not None:
+        if sport_id in sports and sports[sport_id].name is not None:
             logger.debug(f"Sport {payload['OR']} already exists")
             return None
 
@@ -170,7 +184,7 @@ class DataParserRepository:
         return Sport(id=sport_id, name=payload["NA"])
 
     async def parse(self, /, payload: WebSocketPayload) -> Update | None:
-        if payload["HM"] and payload["MR"]:
+        if payload["HM"] is not None and payload["MR"] is not None:
             logger.debug("Parse sport")
             sport = await self.get_sport(payload=payload)
             if sport:
@@ -185,7 +199,7 @@ class DataParserRepository:
             if event:
                 logger.debug(f"Event: {event=}")
                 return Update(key=UpdateType.EVENT, data=event)
-        elif payload["OD"]:
+        elif payload["OD"] is not None:
             logger.debug("Parse odds")
             bet = await self._bet_parser.get_bet(payload=payload)
             if bet:
