@@ -14,7 +14,6 @@ from app.dto.exceptions import EmptyFieldException
 class Event(BaseModel):
     id: str | None = None
     league: str | None = None
-    name: str | None = None
     team_1: str | None = None
     team_2: str | None = None
     sport: AnySport = Field(default_factory=Sport)

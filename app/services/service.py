@@ -1,9 +1,11 @@
 import typing as t
 from contextlib import asynccontextmanager
 
+from app.lib.provider import WindowsChromeDataProvider
 from app.lib.wireshark import WireSharkInterCeptor
 from app.repository.db import DB
 from app.repository.parser import BetParser, DataParserRepository, SportManager
+from app.repository.provider import WebSocketDataProviderRepository
 from app.repository.updates import UpdatesRepository
 from app.repository.websocket_data_parser import WebSocketDataParserRepository
 from app.services.bet365 import Bet365LiveEventsService
@@ -17,6 +19,7 @@ interceptor = WireSharkInterCeptor(
     source_ip=settings.SOURCE_IP,
     interceptor_parameters=settings.INTERCEPTOR_KW,
 )
+provider = WindowsChromeDataProvider(url=settings.BET365_URL)
 
 # Repository Layer
 db = DB(
@@ -29,6 +32,10 @@ data_parser_repo = DataParserRepository(
     storage=db,
 )
 updates_repo = UpdatesRepository(storage=db)
+provider_repo = WebSocketDataProviderRepository(
+    provider=provider,
+    restart_provider_timeout=settings.PROVIDER_TIMEOUT,
+)
 
 
 # Service Layer
@@ -37,6 +44,7 @@ bet_365_live_events_service = Bet365LiveEventsService(
     interceptor=interceptor,
     updates_repo=updates_repo,
     websocket_data_parser_repo=websocket_data_parser_repo,
+    provider_repo=provider_repo,
 )
 liveness_probe_resources: list[LivenessProbeInterface] = [
     bet_365_live_events_service,

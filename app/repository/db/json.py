@@ -19,7 +19,7 @@ class JsonDB(InMemoryDB):
 
     async def save(self) -> None:
         sports: list[AnySport] = list((await self.get_sports()).values())
-        events: list[Event] = (await self.get_events()).values()
+        events: list[Event] = list((await self.get_events()).values())
         serializable = {
             event.id or uuid.uuid4().hex: json.loads(event.model_dump_json(exclude_none=True))
             for event in events

@@ -1,3 +1,4 @@
+import asyncio
 import typing as t
 
 import attrs
@@ -22,6 +23,14 @@ class DataParserInterface(t.Protocol):
 
 class UpdatesRepositoryInterface(t.Protocol):
     async def add(self, /, update: Update) -> None:
+        ...
+
+
+class WebSocketDataProviderRepositoryInterface(t.Protocol):
+    async def ping(self) -> None:
+        ...
+
+    async def restart_now(self) -> None:
         ...
 
 
@@ -66,8 +75,10 @@ class Bet365LiveEventsService(BaseLiveEventsService):
     _interceptor: WireSharkInterCeptor
     _updates_repo: UpdatesRepositoryInterface
     _websocket_data_parser_repo: WebSocketDataParserInterface
+    _provider_repo: WebSocketDataProviderRepositoryInterface
 
     async def put(self, /, data: bytes) -> None:
+        await self._provider_repo.ping()
         async for payload in self._websocket_data_parser_repo.parse(data=data):
             update = await self._data_parser_repo.parse(payload=payload)
             if update is None:
@@ -75,4 +86,6 @@ class Bet365LiveEventsService(BaseLiveEventsService):
             await self._updates_repo.add(update=update)
 
     async def process(self) -> None:
+        logger.info("Start provider")
+        asyncio.create_task(self._provider_repo.restart_now())
         await self._interceptor.intercept(self.put)

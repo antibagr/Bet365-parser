@@ -1,6 +1,6 @@
 import typing as t
 
-from pydantic import FilePath
+from pydantic import FilePath, HttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     KEYLOG_FILE_PATH: FilePath
     JSON_DB_PATH: FilePath
     LIVENESS_PROBE_PORT: int
+    PROVIDER_TIMEOUT: int
+    BET365_URL: HttpUrl
 
     @property
     def is_production(self) -> bool:
