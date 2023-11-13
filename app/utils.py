@@ -8,8 +8,8 @@ def setup_logging() -> None:
     logger.add(
         "logs/log_{time}.log",
         level="DEBUG",
-        compression="zip",
         rotation="1 week",
+        retention=3,
         backtrace=True,
         diagnose=True,
     )

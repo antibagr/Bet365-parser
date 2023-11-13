@@ -70,7 +70,7 @@ class BaseLiveEventsService:
 
 @t.final
 @attrs.define(slots=True, frozen=False, kw_only=True)
-class Bet365LiveEventsService(BaseLiveEventsService):
+class Bet365LiveEventsService:
     _data_parser_repo: DataParserInterface
     _interceptor: WireSharkInterCeptor
     _updates_repo: UpdatesRepositoryInterface
@@ -80,7 +80,11 @@ class Bet365LiveEventsService(BaseLiveEventsService):
     async def put(self, /, data: bytes) -> None:
         await self._provider_repo.ping()
         async for payload in self._websocket_data_parser_repo.parse(data=data):
-            update = await self._data_parser_repo.parse(payload=payload)
+            try:
+                update = await self._data_parser_repo.parse(payload=payload)
+            except Exception as exc:
+                logger.exception(f"Parse error: {exc}")
+                continue
             if update is None:
                 continue
             await self._updates_repo.add(update=update)

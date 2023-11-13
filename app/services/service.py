@@ -1,7 +1,8 @@
+import platform
 import typing as t
 from contextlib import asynccontextmanager
 
-from app.lib.provider import WindowsChromeDataProvider
+from app.lib.provider import LinuxDataProvider, WindowsChromeDataProvider
 from app.lib.wireshark import WireSharkInterCeptor
 from app.repository.db import DB
 from app.repository.parser import BetParser, DataParserRepository, SportManager
@@ -19,7 +20,11 @@ interceptor = WireSharkInterCeptor(
     source_ip=settings.SOURCE_IP,
     interceptor_parameters=settings.INTERCEPTOR_KW,
 )
-provider = WindowsChromeDataProvider(url=settings.BET365_URL)
+
+if platform.system() == "Windows":
+    provider = WindowsChromeDataProvider(url=settings.BET365_URL)
+else:
+    provider = LinuxDataProvider(url=settings.BET365_URL)
 
 # Repository Layer
 db = DB(
@@ -58,6 +63,7 @@ async def startup() -> None:
 
 
 async def shutdown() -> None:
+    await db.save()
     await db.disconnect()
 
 

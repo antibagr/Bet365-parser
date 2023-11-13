@@ -1,16 +1,17 @@
 import asyncio
+import random
 import typing as t
 
 import attrs
 from loguru import logger
 
-from app.lib.provider import WindowsChromeDataProvider
+from app.lib.provider import BaseDataProvider
 
 
 @t.final
 @attrs.define(slots=True, frozen=False, kw_only=True)
 class WebSocketDataProviderRepository:
-    _provider: WindowsChromeDataProvider
+    _provider: BaseDataProvider
     _restart_provider_timeout: int
 
     _restart_task: asyncio.Task = attrs.field(init=False, repr=False, default=None)
@@ -21,7 +22,7 @@ class WebSocketDataProviderRepository:
         Wait for reopen provider.
         """
         try:
-            await asyncio.sleep(self._restart_provider_timeout)
+            await asyncio.sleep(self._restart_provider_timeout + random.randint(3, 15))
             logger.warning("Restart provider due to timeout")
             self._restart_is_scheduled = False
             await self.restart_now()

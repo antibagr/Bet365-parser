@@ -1,3 +1,4 @@
+import re
 import typing as t
 from collections import defaultdict
 
@@ -9,6 +10,12 @@ from app.dto.annotations import WebSocketPayload
 from app.dto.enums import WebSocketMessageType
 
 logger.bind(context="websocket_data_parser")
+
+
+class Regex:
+    UPDATE_DATA_DELIM = re.compile(rb"\x15(.+?)\;\|\x08")
+    MESSAGE_DELIM = re.compile(rb"(.+)\x01(\D?)\|(.+)")
+    RECORD_DELIM = re.compile(rb"(\D{2})\=([^,;]+)")
 
 
 @t.final
@@ -29,35 +36,25 @@ class WebSocketDataParserRepository:
 
             yield payload
 
-    async def parse_update(self, /, data: bytes) -> None:
-        # NOTE: (a.bagrianov): WIP
-        logger.debug("Process ws update")
+    async def stream_updates(self, /, data: bytes) -> t.AsyncGenerator[WebSocketPayload, None]:
+        for update in Regex.UPDATE_DATA_DELIM.findall(data):
+            topic_id, update_type, data = Regex.MESSAGE_DELIM.findall(update)[0]
+            parsed = Regex.RECORD_DELIM.findall(data)
 
-        messages = data.split(b"\x08")
-
-        for message in messages:
-            # first byte is one of WebSocketMessageType
-            if message[0] == WebSocketMessageType.INITIAL_TOPIC_LOAD:
-                logger.debug(f"Initial topic load {message.decode('utf-8')}")
-                continue
-
-            if message[0] != WebSocketMessageType.DELTA:
-                raise ValueError(f"Invalid message type: {data!r}")
-
-            _event_id, updates = message[1:].split(b"\x01")
-
-            update_type, data, _end = updates.split(b"|")
-
-            formatted_data = {rec[0:2]: rec[3:] for rec in data.split(b";") if rec}
-
-            if update_type != b"U":
-                logger.debug(f"NOT AN UPDATE: {formatted_data=}")
+            parsed_data: dict[bytes, bytes] = {
+                b"topic_id": topic_id,
+                b"update_type": update_type,
+                **{pair[0]: pair[1] for pair in parsed},
+            }
+            payload = {k.decode("utf-8"): v.decode("utf-8") for k, v in parsed_data.items()}
+            yield defaultdict(lambda: None, payload)
 
     async def parse(self, /, data: bytes) -> t.AsyncGenerator[WebSocketPayload, None]:
         SUBSCRIBE_ACTION = 4
 
         if data.startswith(constants.UPDATE_DATA_DELIM):
-            # await self.parse_update(data)
+            async for payload in self.stream_updates(data=data):
+                yield payload
             return
 
         for msg in data.split(constants.MESSAGE_DELIM):

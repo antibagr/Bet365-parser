@@ -1,5 +1,7 @@
 import typing as t
 
+from loguru import logger
+
 from app.dto.entities.bets import Bet
 from app.dto.entities.event import Event, Events
 from app.dto.entities.sport import AnySport, ESport, Sport, Sports
@@ -34,12 +36,27 @@ class InMemoryDB(BaseDB):
             case UpdateType.BET:
                 bet: Bet = t.cast(Bet, update.data)
                 if not bet.is_empty:
-                    (await self.get_events())[bet.event_id].bets[bet.bet_type].append(bet)
+                    await self.add_bet(bet)
             case UpdateType.SPORT:
                 sport: AnySport = t.cast(AnySport, update.data)
                 await self.add_sport(sport)
             case _:
                 raise KeyError(f"Unknown update key: {update.key}")
+
+    async def add_bet(self, bet: Bet) -> None:
+        events = await self.get_events()
+
+        if bet.event_id not in events:
+            events[bet.event_id] = Event(id=bet.event_id)
+
+        if bet.id in events[bet.event_id].bets:
+            logger.debug(f"UPDATE: {bet.id=}")
+            events[bet.event_id].bets[bet.id].odds = bet.odds
+        else:
+            logger.debug(f"ADD: {bet.id=}")
+            events[bet.event_id].bets[bet.id] = bet
+
+        events[bet.event_id].bets[bet.id].update()
 
     async def add_sport(self, sport: AnySport) -> None:
         if sport.id is None:

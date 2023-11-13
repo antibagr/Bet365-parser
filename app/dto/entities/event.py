@@ -18,7 +18,7 @@ class Event(BaseModel):
     team_2: str | None = None
     sport: AnySport = Field(default_factory=Sport)
     event_dt: dt.datetime | None = None
-    bets: t.DefaultDict[str, list[Bet]] = Field(default_factory=lambda: defaultdict(list))
+    bets: dict[str, Bet] = Field(default_factory=dict)
 
     @property
     def event_id(self) -> str:
@@ -33,16 +33,8 @@ class Event(BaseModel):
         return None
 
     @field_serializer("bets")
-    def serialize_bets(
-        self, bets: t.DefaultDict[str, list[Bet]], _info
-    ) -> dict[str, dict[str, dict[str, str]]]:
-        return {
-            bet_type: {
-                bet.id: bet.model_dump(exclude={"id", "event_id", "bet_type"})
-                for bet in bets[bet_type]
-            }
-            for bet_type in bets
-        }
+    def serialize_bets(self, bets: dict[str, Bet], _info) -> dict[str, dict[str, dict[str, str]]]:
+        return {bet_id: bet.model_dump(exclude=("event_id", "id")) for bet_id, bet in bets.items()}
 
     @field_serializer("sport")
     def serialize_sport(self, sport: AnySport, _info) -> str | None:
