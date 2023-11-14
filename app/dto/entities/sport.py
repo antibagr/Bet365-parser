@@ -11,6 +11,7 @@ from app.utils import get_esport_id
 class Sport(BaseModel):
     id: str | None = None
     name: str | None = None
+    is_team_sport: bool = True
 
     @property
     def sport_id(self) -> str:
@@ -72,3 +73,6 @@ AnySport: t.TypeAlias = t.Union[Sport, ESport]
 @t.final
 class Sports(BaseModel):
     sports: dict[str, AnySport] = Field(default_factory=dict)
+
+
+NoSport: t.Final = Sport(id="-1", name="No Sport")

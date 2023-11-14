@@ -45,7 +45,8 @@ class WindowsChromeDataProvider(BaseDataProvider):
         Close browser if any.
         """
 
-        cmd = f"taskkill /im {self._browser} /f"
+        # cmd = f"taskkill /im {self._browser} /f"
+        cmd = "cls"
 
         if self._opened:
             proc = await asyncio.create_subprocess_shell(

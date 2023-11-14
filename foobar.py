@@ -1,8 +1,28 @@
-import re
+"""
 
-def get_bet_id_from_topic_id(topic_id: str) -> str:
-    bet_id_match = re.findall(r"(\d+)-|(\d+)[^_]+_\d+_\d+", topic_id)
-    return str(bet_id_match[0][0] or bet_id_match[0][1])
+Пожалуйста, решите следующую простую задачу. Можно использовать любые инструменты.
+Дано: список dict-объектов вида вида {"key": "value"}, например [{"key1": "value1"}, {"k1": "v1", "k2": "v2", "k3": "v3"}, {}, {}, {"key1": "value1"}, {"key1": "value1"}, {"key2": "value2"}].
+
+Напишите функцию, которая удаляет дубликаты из этого списка. Для примера выше возвращаемое значение может быть равно [{"key1": "value1"}, {"k1": "v1", "k2": "v2", "k3": "v3"}, {}, {"key2": "value2"}].
+Обязательное условие: функция не должна иметь сложность O(n^2).
+
+"""
 
 
-print(get_bet_id_from_topic_id("OVM49P146582160-1589068981"))
+dicts: list[dict[str, str]] = [
+    {"key1": "value1"},
+    {"k1": "v1", "k2": "v2", "k3": "v3"},
+    {},
+    {},
+    {"key1": "value1"},
+    {"key1": "value1"},
+    {"key2": "value2"},
+]
+
+
+def remove_dublicates(list_of_dicts: list[dict[str, str]]) -> list[dict[str, str]]:
+    return list({tuple(sorted(d.items())): d for d in list_of_dicts}.values())
+
+
+if __name__ == "__main__":
+    print(remove_dublicates(dicts))

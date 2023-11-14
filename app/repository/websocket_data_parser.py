@@ -1,4 +1,3 @@
-import re
 import typing as t
 from collections import defaultdict
 
@@ -8,14 +7,9 @@ from loguru import logger
 from app.dto import constants
 from app.dto.annotations import WebSocketPayload
 from app.dto.enums import WebSocketMessageType
+from app.dto.regex import Regex
 
 logger.bind(context="websocket_data_parser")
-
-
-class Regex:
-    UPDATE_DATA_DELIM = re.compile(rb"\x15(.+?)\;\|\x08")
-    MESSAGE_DELIM = re.compile(rb"(.+)\x01(\D?)\|(.+)")
-    RECORD_DELIM = re.compile(rb"(\D{2})\=([^,;]+)")
 
 
 @t.final
@@ -37,9 +31,9 @@ class WebSocketDataParserRepository:
             yield payload
 
     async def stream_updates(self, /, data: bytes) -> t.AsyncGenerator[WebSocketPayload, None]:
-        for update in Regex.UPDATE_DATA_DELIM.findall(data):
-            topic_id, update_type, data = Regex.MESSAGE_DELIM.findall(update)[0]
-            parsed = Regex.RECORD_DELIM.findall(data)
+        for update in Regex.WS.UPDATE_DATA_DELIM.findall(data):
+            topic_id, update_type, data = Regex.WS.MESSAGE_DELIM.findall(update)[0]
+            parsed = Regex.WS.RECORD_DELIM.findall(data)
 
             parsed_data: dict[bytes, bytes] = {
                 b"topic_id": topic_id,

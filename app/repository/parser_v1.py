@@ -5,10 +5,9 @@ import attrs
 from loguru import logger
 
 from app.dto.annotations import WebSocketPayload
-from app.dto.constants import NoSport
 from app.dto.entities.bets import Bet
 from app.dto.entities.event import Event
-from app.dto.entities.sport import AnySport, ESport, Sport
+from app.dto.entities.sport import AnySport, ESport, NoSport, Sport
 from app.dto.entities.update import Update
 from app.dto.enums import BetType, UpdateType
 from app.repository.db.db import DB
@@ -21,7 +20,7 @@ class SportManager:
     def __init__(self, db: DB) -> None:
         self._db = db
 
-    async def get_esport(self, sport_id: str | None) -> AnySport | None:
+    async def get_esport(self, sport_id: str | None) -> Sport:
         if sport_id is None:
             return None
 
@@ -35,10 +34,7 @@ class SportManager:
             await self._db.add_sport(ESport(sport=sport))
         return await self._db.get_esport(esport_id)
 
-    async def get_sport(self, sport_id: str | None) -> Sport | None:
-        if sport_id is None:
-            return None
-
+    async def get_sport(self, sport_id) -> Sport:
         if not await self._db.sport_exists(sport_id):
             await self._db.add_sport(Sport(id=sport_id))
         return await self._db.get_sport(sport_id)
@@ -137,14 +133,11 @@ class DataParserRepository:
     _storage: DB
 
     async def _get_sport(self, /, sport_id: str | None, team_1: str, team_2: str) -> AnySport:
+        if sport_id is None:
+            return NoSport
         if team_1.endswith("Esports") or team_2.endswith("Esports"):
-            sport = await self._sport_manager.get_esport(sport_id)
-        else:
-            sport = await self._sport_manager.get_sport(sport_id)
-        if sport is None:
-            logger.warning(f"Sport {sport_id} not found")
-            sport = NoSport
-        return sport
+            return await self._sport_manager.get_esport(sport_id)
+        return await self._sport_manager.get_sport(sport_id)
 
     async def get_event(self, /, payload: WebSocketPayload) -> Event | None:
         league = payload["CT"]
@@ -197,6 +190,18 @@ class DataParserRepository:
 
         logger.debug(f"New sport: {payload['NA']=}")
         logger.debug(str(sports))
+
+        if payload["NA"] == "Tennis":
+            logger.debug("Update tennis bets")
+            events = await self._storage.get_events()
+            for event in events.values():
+                if event.sport.id == sport_id:
+                    for bet in event.bets.values():
+                        updated_bet = await self._bet_parser.get_bet(payload=bet.raw)
+                        if updated_bet is not None:
+                            logger.debug(f"Update bet {updated_bet.id=}")
+                            await self._storage.add(Update(key=UpdateType.BET, data=updated_bet))
+
         return Sport(id=sport_id, name=payload["NA"])
 
     async def parse(self, /, payload: WebSocketPayload) -> Update | None:

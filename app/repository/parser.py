@@ -1,32 +1,29 @@
 import datetime as dt
-import re
 import typing as t
-from collections import defaultdict
 from contextlib import suppress
 
 import attrs
 from loguru import logger
 
 from app.dto.annotations import WebSocketPayload
-from app.dto.constants import NoSport
 from app.dto.entities.bets import Bet
 from app.dto.entities.event import Event
-from app.dto.entities.sport import ESport, Sport
+from app.dto.entities.sport import ESport, NoSport, Sport
 from app.dto.entities.update import Update
 from app.dto.enums import BetType, UpdateType
 from app.repository.db.db import DB
+from app.dto.regex import Regex
 
 logger.bind(context="data_parser_v2")
 
-TEMP = {"Sport": {}, "Events": {}, "ESport": {}}  # type: ignore
-
-BETS: dict[str, Bet] = {}
-BETS_TOPICS: dict[str, Bet] = {}
-BETS_EVENTS: dict[str, Bet] = {}
-BETS_UPDATES: dict[str, Bet] = {}
+SINGLE_PLAYER_EVENTS = set()
 
 
 class InvalidTeamName(Exception):
+    ...
+
+
+class InvalidUpdate(Exception):
     ...
 
 
@@ -40,7 +37,7 @@ def get_team_from_event_name(event_name: str) -> tuple[str, str]:
 
 
 def get_bet_id_from_topic_id(topic_id: str) -> str:
-    bet_id_match = re.findall(r"(\d+)-|(\d+)[^_]+_\d+_\d+", topic_id)
+    bet_id_match = Regex.DATA.BET_ID.findall(topic_id)
     return str(bet_id_match[0][0] or bet_id_match[0][1])
 
 
@@ -59,23 +56,19 @@ class BetParser:
         self._db = db
 
     async def get_totals(self, payload: WebSocketPayload) -> Bet | None:
-        match payload["OR"]:
-            case "0":
-                total_type = "Over"
-            case "1":
-                total_type = "Under"
-            case _:
-                total_type = "Unknown"
-
         _hd = t.cast(str, payload["HD"])
         _ha = t.cast(str, payload["HA"])
 
         if "," in _hd:
             value = _hd
         else:
-            if float(_ha) != float(_hd.strip()):
-                logger.warning(f"Total {_ha=} != {_hd=}")
-                raise ValueError(f"Total {_ha=} != {_hd=}")
+            try:
+                if float(_ha) != float(_hd.strip()):
+                    logger.warning(f"Total {_ha=} != {_hd=}")
+                    raise ValueError(f"Total {_ha=} != {_hd=}")
+            except ValueError:
+                logger.error(f"Invalid total {_ha=} {_hd=}")
+                return None
             value = _ha
 
         bet_id = payload["ID"]
@@ -83,12 +76,34 @@ class BetParser:
         odds = t.cast(str, payload["OD"])
 
         if None in (bet_id, event_id, odds):
-            logger.warning(f"Invalid bet {payload}")
+            logger.error(f"Invalid bet {dict(payload)}")
             return None
+
+        event = await self._db.get_event(event_id=event_id)
+
+        if event.sport.name == "Basketball":
+            logger.debug(f"Bet {bet_id} is basketball spread")
+
+            spread_type = "Home" if payload["HA"].startswith("-") else "Away"
+
+            return Bet(
+                id=bet_id,
+                event_id=event_id,
+                odds=odds,
+                bet_type=BetType.Spread,
+                spread_type=spread_type,
+                value=value,
+                topic=payload["IT"],
+            )
+
+        total_type = {
+            "0": "Over",
+            "1": "Under",
+        }.get(payload["OR"], "Unknown")
 
         return Bet(  # type: ignore[call-arg]
             id=bet_id,
-            event_id=str(event_id),
+            event_id=event_id,
             # odds=number_to_string(fractional_odds_to_decimal(odds)),
             odds=odds,
             bet_type=BetType.Totals,
@@ -116,7 +131,7 @@ class BetParser:
         odds = t.cast(str, payload["OD"])
 
         if None in (bet_id, event_id, odds):
-            logger.warning(f"Invalid bet {payload}")
+            logger.error(f"Invalid bet {dict(payload)}")
             return None
 
         return Bet(  # type: ignore[call-arg]
@@ -129,7 +144,41 @@ class BetParser:
             topic=payload["IT"],
         )
 
+    async def get_winner(self, payload: WebSocketPayload) -> Bet | None:
+        if payload["OR"] not in ("0", "1"):
+            raise ValueError(f"Invalid tennis winner {payload=}")
+
+        player = int(payload["OR"]) + 1
+
+        bet_id = t.cast(str, payload["ID"])
+        event_id = t.cast(str, payload["FI"])
+        odds = t.cast(str, payload["OD"])
+
+        if None in (bet_id, event_id, odds):
+            logger.error(f"Invalid bet {dict(payload)}")
+            return None
+
+        return Bet(  # type: ignore[call-arg]
+            id=bet_id,
+            event_id=str(event_id),
+            odds=odds,
+            bet_type=BetType.Winner,
+            player=player,
+            topic=payload["IT"],
+        )
+
     async def get_bet(self, payload: WebSocketPayload) -> Bet | None:
+        event_id = t.cast(str, payload["FI"])
+        event = await self._db.get_event(event_id=event_id)
+        if event is None:
+            raise ValueError(f"Event {event_id} not found")
+
+        if event_id in SINGLE_PLAYER_EVENTS:
+            logger.debug(f"Bet is single player {dict(payload)=} {event=}")
+            if payload["OR"] is not None:
+                logger.debug("Parse winner")
+                return await self.get_winner(payload=payload)
+
         if payload["HD"] is not None:
             logger.debug("Parse totals")
             return await self.get_totals(payload=payload)
@@ -137,7 +186,7 @@ class BetParser:
             logger.debug("Parse results")
             return await self.get_results(payload=payload)
         else:
-            logger.warning("Unknown odds...")
+            logger.error(f"Invalid bet {dict(payload)}")
             return None
 
 
@@ -164,14 +213,6 @@ class DataParserRepository:
 
         sport_position = payload["OR"]
 
-        if sport_id in TEMP:
-            logger.warning(f"Sport {sport_id} already exists")
-
-        TEMP["Sport"][sport_id] = {
-            "name": sport_name,
-            "topic": payload["IT"],
-            "position": sport_position,
-        }
         return Sport(id=sport_id, name=sport_name)
 
     async def get_esport(self, payload: WebSocketPayload) -> Sport | None:
@@ -190,29 +231,27 @@ class DataParserRepository:
         sport_name = payload["NA"]
         sport_position = payload["OR"]
 
-        TEMP["ESport"][sport_sub_id] = {
-            "name": sport_name,
-            "position": sport_position,
-            "topic": payload["IT"],
-            "sub_id": sport_sub_id,
-        }
-
-        logger.error(TEMP["ESport"])
-
         return Sport(id=sport_id, name=sport_name)
 
-    async def _get_sport_from_event_id(self, event_id: str) -> Sport:
-        if _sport_matches := re.search(r"C(\d+)A", event_id):
-            sport_id = _sport_matches.group()[1:-1]
-            return await self._storage.get_sport(sport_id=sport_id) or NoSport
-        return NoSport
+    async def _get_sport_from_event_id(self, event_id: str) -> Sport | None:
+        _sport_id = Regex.DATA.SPORT_FROM_EVENT.findall(event_id)
+        logger.warning(f"SPORT_FROM_EVENT {event_id} -> {_sport_id=}")
+        sport_id = _sport_id[0] if _sport_id else None
+        if _sport_id is not None:
+            sport = await self._storage.get_sport(sport_id=sport_id)
+            if sport is None:
+                logger.info(f"Sport {sport_id} not found. Addding new sport")
+                await self._storage.add_sport(sport=Sport(id=sport_id, name=None))
+                sport = await self._storage.get_sport(sport_id=sport_id)
+            return sport
+        return None
 
     async def _get_esport_from_event(self, payload: WebSocketPayload) -> ESport:
         sport = await self._storage.get_esport(payload["T2"])
         return sport or NoSport
 
     async def get_event(self, payload: WebSocketPayload) -> Event | None:
-        assert payload["HP"] in ("0", "1", "2"), payload
+        # assert payload["HP"] in ("0", "1", "2"), payload
 
         league_name = payload["CT"]
         event_name = payload["NA"]
@@ -222,7 +261,7 @@ class DataParserRepository:
         event_topic = payload["IT"]
         event_sub_id = payload["ID"]
 
-        assert payload["OF"] in ("00000", "11111", "111", None), payload
+        # assert payload["OF"] in ("00000", "11111", "111", None), payload
 
         try:
             team_1, team_2 = get_team_from_event_name(event_name)
@@ -233,7 +272,7 @@ class DataParserRepository:
         if payload["TU"] is not None:
             event_dt = dt.datetime.strptime(payload["TU"], "%Y%m%d%H%M%S")
         else:
-            logger.debug(f"No event date {payload=}")
+            logger.debug("No event date")
             event_dt = None
 
         if payload["ID"].endswith("C151A_1_3"):
@@ -241,16 +280,11 @@ class DataParserRepository:
         else:
             sport = await self._get_sport_from_event_id(payload["ID"])
 
-        TEMP["Events"][event_id] = {
-            "name": event_name,
-            "topic": event_topic,
-            "sub_id": event_sub_id,
-            "team_1": team_1,
-            "team_2": team_2,
-            "position": event_position,
-            "league_name": league_name,
-            "sport": sport,
-        }
+            if sport is None:
+                logger.error(f"Sport not found {payload['ID']=}")
+                return None
+            
+        logger.info(f"New event: {event_id} {team_1} {team_2} {sport}")
 
         return Event(
             id=event_id,
@@ -261,40 +295,13 @@ class DataParserRepository:
             event_dt=event_dt,
         )
 
-    async def parse_single_event(self, payload: WebSocketPayload) -> Update | None:
-        event_name = payload["NA"]
-        event_position = payload["OR"]
-        event_id = payload["ID"]
-        event_topic = payload["IT"]
-        try:
-            team_1, team_2 = get_team_from_event_name(event_name)
-        except InvalidTeamName:
-            return None
-
-        TEMP["Events"][event_id] = {
-            "name": event_name,
-            "topic": event_topic,
-            "team_1": team_1,
-            "team_2": team_2,
-            "position": event_position,
-        }
-
-        sport = await self._get_sport_from_event_id(payload["ID"])
-
-        return Event(
-            id=event_id,
-            league=None,
-            team_1=team_1,
-            team_2=team_2,
-            sport=sport,
-            event_dt=dt.datetime.now(),
-        )
-
     async def parse_update(self, payload: WebSocketPayload) -> Bet | None:
-        def get_bet(_id):
-            for storage in (BETS, BETS_TOPICS, BETS_EVENTS, BETS_UPDATES):
-                if _id in storage:
-                    return storage[_id]
+        if payload["TU"] is not None:
+            logger.debug("Update bet time update sent")
+            return None
+        elif payload["IT"] is not None:
+            logger.debug("Update bet topic sent")
+            return None
 
         if payload["update_type"] == "I":
             logger.info("Insert bet")
@@ -302,76 +309,92 @@ class DataParserRepository:
             return await self._bet_parser.get_bet(payload)
         if payload["update_type"] != "U":
             logger.warning(f"Unknown update type {payload['update_type']}")
-            return None
+            raise InvalidUpdate()
 
         if "OD" not in payload:
-            return None
+            raise InvalidUpdate()
 
         topic_id = payload["topic_id"].strip()
 
-        if get_bet(topic_id):
-            bet = get_bet(topic_id)
+        if bet_by_topic := self._storage.get_bet_cache(topic_id):
+            bet = bet_by_topic
         else:
             bet_id = str(get_bet_id_from_topic_id(topic_id))
-            bet = get_bet(bet_id)
+            bet = self._storage.get_bet_cache(bet_id)
             if bet is None:
-                logger.warning(f"Bet {topic_id} {bet_id} not found")
-                logger.warning(f"{bet_id in BETS=}")
-                logger.warning(f"{bet_id in BETS_EVENTS=}")
-                logger.warning(f"{bet_id in BETS_TOPICS=}")
-                logger.warning(f"{bet_id in BETS_UPDATES=}")
-                return None
+                raise InvalidUpdate()
 
         logger.debug(f"Bet {topic_id}")
         bet.odds = payload["OD"]
         logger.info(f"Bet {topic_id} updated")
         return bet
 
+    async def parse_unknown_payload(self, payload: WebSocketPayload) -> None:
+        if payload["NA"] is not None:
+            if payload["NA"] == "Match Winner":
+                event_id = payload["FI"]
+                SINGLE_PLAYER_EVENTS.add(event_id)
+                logger.debug(f"Event {event_id} is single player")
+            elif payload["NA"] == "Fulltime Result":
+                logger.debug("Fulltime Result")
+        elif payload["TI"] is not None:
+            logger.debug("Time info sent")
+        elif payload["TR"] is not None:
+            logger.debug("Event subtype sent")
+        else:
+            logger.error(f"Invalid payload {dict(payload)}")
+        return None
+
     async def parse(self, /, payload: WebSocketPayload) -> Update | None:
         logger.debug(f"Parse {dict(payload)=}")
 
         if payload["update_type"] is not None:
-            bet = await self.parse_update(payload=payload)
-            if bet:
-                return Update(key=UpdateType.BET, data=bet)
+            try:
+                bet = await self.parse_update(payload=payload)
+                if bet is not None:
+                    return Update(key=UpdateType.BET, data=bet)
+            except InvalidUpdate:
+                logger.error(f"Invalid update bet {dict(payload)}")
             return None
 
-        match payload["ID"]:
+        match payload["ID"] or payload["IT"]:
             case PayloadID.ENDP:
                 logger.debug("ENDP sent")
+                return None
             case PayloadID.P_ENDP:
                 logger.success("Pull subscription connected!")
+                return None
 
-        if None not in (payload["EX"], payload["NA"]) and payload["NA"].startswith("/"):  # type: ignore
+        if payload["IT"] is not None and Regex.DATA.IT_P_CONFIG.findall(payload["IT"]):
+            logger.debug("P_CONFIG sent")
+            return None
+        elif payload["EX"] is not None:  # type: ignore
             logger.debug("API details sent")
-            assert payload["IT"] == payload["IT"].lower()  # type: ignore  # nosec
         elif payload["HC"] is not None:
-            logger.info("Sport sent")
             sport = await self.get_sport(payload)  # type: ignore
             if sport is not None:
                 return Update(key=UpdateType.SPORT, data=sport)
+            else:
+                logger.error(f"Invalid sport {dict(payload)}")
         elif payload["IT"] is not None and payload["IT"].startswith("OVDI"):
-            logger.info("ESport sent")
             esport = await self.get_esport(payload)
             if esport is not None:
                 return Update(key=UpdateType.SPORT, data=esport)
-        elif payload["HP"] is not None:
-            logger.info("League event sent")
+            else:
+                logger.error(f"Invalid esport {dict(payload)}")
+        elif any([payload["HP"], payload["MS"], payload["CT"]]):
             event = await self.get_event(payload)
             if event is not None:
                 return Update(key=UpdateType.EVENT, data=event)
-        elif payload["MS"] is not None:
-            event = await self.parse_single_event(payload)
-            if event is not None:
-                logger.info("Single event sent")
-                return Update(key=UpdateType.EVENT, data=event)
+            else:
+                logger.error(f"Invalid event {dict(payload)}")
         elif payload["OD"] is not None:
             bet = await self._bet_parser.get_bet(payload)
             if bet is not None:
-                logger.info("Bet sent")
-                BETS[bet.id] = BETS_TOPICS[bet.topic] = BETS_EVENTS[bet.event_id] = bet
+                event = await self._storage.get_event(bet.event_id)
+                if event.sport.id == "13":
+                    logger.debug(f"Bet {dict(payload)=} {bet=} {event=} is tennis")
                 return Update(key=UpdateType.BET, data=bet)
             else:
-                logger.warning(f"Invalid bet {payload}")
-
-        return None
+                logger.error(f"Invalid bet {dict(payload)}")
+        return await self.parse_unknown_payload(payload)

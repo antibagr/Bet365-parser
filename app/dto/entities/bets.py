@@ -15,7 +15,9 @@ class Bet(BaseModel):
     event_id: str
     odds: str
     bet_type: BetType
+    topic: str
     updated_at: dt.datetime = Field(default_factory=dt.datetime.utcnow)
+    raw: dict[str, str | None] = Field(default=None)
 
     def update(self) -> None:
         """

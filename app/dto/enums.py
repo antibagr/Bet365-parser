@@ -28,6 +28,8 @@ class BetType(enum.StrEnum):
     Totals = "Totals"
     Handicap = "Handicap"
     Unknown = "Unknown"
+    Spread = "Spread"
+    Winner = "Winner"
 
 
 @t.final

@@ -81,7 +81,10 @@ class Bet365LiveEventsService:
         await self._provider_repo.ping()
         async for payload in self._websocket_data_parser_repo.parse(data=data):
             try:
-                update = await self._data_parser_repo.parse(payload=payload)
+                if payload:
+                    update = await self._data_parser_repo.parse(payload=payload)
+                else:
+                    logger.debug("Empty payload")
             except Exception as exc:
                 logger.exception(f"Parse error: {exc}")
                 continue

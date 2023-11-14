@@ -50,7 +50,6 @@ class WebSocketDataProviderRepository:
         """
         Notify provider that data stream is active.
         """
-        logger.debug("Ping")
         if self._restart_is_scheduled:
             self._restart_task.cancel()
             self._restart_is_scheduled = False
