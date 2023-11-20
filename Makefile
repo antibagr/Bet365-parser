@@ -7,26 +7,26 @@ help: ## Display this help screen
 .PHONY: help
 
 install: ## Install project dependencies
-	python -m poetry install --no-interaction --no-ansi
+	poetry install --no-interaction --no-ansi
 .PHONY: install
 
 format: ## Format the source code
-	python -m poetry run black $(SOURCES)
-	python -m poetry run isort $(SOURCES)
+	poetry run black $(SOURCES)
+	poetry run isort $(SOURCES)
 .PHONY: format
 
 lint: ## Lint the source code
-	python -m poetry run black --check $(SOURCES)
-	python -m poetry run isort --check $(SOURCES)
+	poetry run black --check $(SOURCES)
+	poetry run isort --check $(SOURCES)
 
-	python -m poetry run flake8 $(SOURCES)
-	python -m poetry run mypy $(SOURCES)
-	python -m poetry run bandit -c pyproject.toml -r app
+	poetry run flake8 $(SOURCES)
+	poetry run mypy $(SOURCES)
+	poetry run bandit -c pyproject.toml -r app
 
 .PHONY: lint
 
 run: ## Run the development Django server
-	python -m poetry run python -m app.cmd run-parsers
+	poetry run python -m app.cmd run-parsers
 .PHONY: run
 
 compose-up: ## Run the development Django server with docker-compose
@@ -38,12 +38,12 @@ compose-down: ## Stop the development Django server with docker-compose
 .PHONY: compose-down
 
 tests-units: ## Run unit tests
-	python -m poetry run coverage run -m pytest -s ./tests/units
-	python -m poetry run coverage report  --precision=2 -m
+	poetry run coverage run -m pytest -s ./tests/units
+	poetry run coverage report  --precision=2 -m
 .PHONY: tests-units
 
 tests-integrations: ## Run integration tests
-	python -m poetry run pytest tests/integrations
+	poetry run pytest tests/integrations
 .PHONY: tests-integrations
 
 test: tests-units tests-integrations ## Run all available tests
