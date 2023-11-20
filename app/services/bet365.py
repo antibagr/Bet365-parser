@@ -33,39 +33,8 @@ class WebSocketDataProviderRepositoryInterface(t.Protocol):
     async def restart_now(self) -> None:
         ...
 
-
-@attrs.define(slots=True, frozen=False, kw_only=True)
-class BaseLiveEventsService:
-    _is_alive: bool = attrs.field(default=True, init=False)
-    _is_started: bool = attrs.field(default=False, init=False)
-
     async def is_alive(self) -> bool:
-        if not self._is_started:
-            return True
-        return self._is_alive
-
-    # async def process(self) -> None:
-    #     try:
-    #         self._is_started = True
-    #         # while True:
-    #         try:
-    #             async for data in self._get_stream():
-    #                 try:
-    #                     await self._process_stream(data=data)
-    #                     self._is_alive = True
-    #                 except Exception as exc:
-    #                     self._is_alive = False
-    #                     logger.exception(f"Process stream error: {exc}")
-    #         except Exception as exc:
-    #             self._is_alive = False
-    #             logger.exception(f"Stream error: {exc}")
-    #             raise
-    #     finally:
-    #         self._is_started = False
-    #         self._is_alive = False
-
-    # def put(self) -> t.AsyncGenerator[bytes, None]:
-    #     raise NotImplementedError()
+        ...
 
 
 @t.final
@@ -96,3 +65,6 @@ class Bet365LiveEventsService:
         logger.info("Start provider")
         asyncio.create_task(self._provider_repo.restart_now())
         await self._interceptor.intercept(self.put)
+
+    async def is_alive(self) -> bool:
+        return await self._provider_repo.is_alive()

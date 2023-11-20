@@ -55,3 +55,6 @@ class WebSocketDataProviderRepository:
             self._restart_is_scheduled = False
 
         await self.schedule_restart()
+
+    async def is_alive(self) -> bool:
+        return self._restart_is_scheduled

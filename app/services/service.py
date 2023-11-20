@@ -2,7 +2,7 @@ import platform
 import typing as t
 from contextlib import asynccontextmanager
 
-from app.lib.provider import LinuxDataProvider, WindowsChromeDataProvider
+from app.lib.provider import BaseDataProvider, LinuxDataProvider, WindowsChromeDataProvider
 from app.lib.wireshark import WireSharkInterCeptor
 from app.repository.db import DB
 from app.repository.parser import BetParser, DataParserRepository, SportManager
@@ -21,6 +21,7 @@ interceptor = WireSharkInterCeptor(
     interceptor_parameters=settings.INTERCEPTOR_KW,
 )
 
+provider: BaseDataProvider
 if platform.system() == "Windows":
     provider = WindowsChromeDataProvider(url=settings.BET365_URL)
 else:
@@ -52,7 +53,8 @@ bet_365_live_events_service = Bet365LiveEventsService(
     provider_repo=provider_repo,
 )
 liveness_probe_resources: list[LivenessProbeInterface] = [
-    bet_365_live_events_service,
+    provider,
+    provider_repo,
 ]
 liveness_probe_service = LivenessProbeSrv(resources=liveness_probe_resources)
 

@@ -1,5 +1,5 @@
 import asyncio
-import subprocess
+import subprocess  # nosec
 import webbrowser
 
 from loguru import logger
@@ -19,6 +19,9 @@ class BaseDataProvider:
 
     async def close(self) -> None:
         raise NotImplementedError
+
+    async def is_alive(self) -> bool:
+        return self._opened
 
 
 class WindowsChromeDataProvider(BaseDataProvider):
@@ -45,8 +48,7 @@ class WindowsChromeDataProvider(BaseDataProvider):
         Close browser if any.
         """
 
-        # cmd = f"taskkill /im {self._browser} /f"
-        cmd = "cls"
+        cmd = f"taskkill /im {self._browser} /f"
 
         if self._opened:
             proc = await asyncio.create_subprocess_shell(
@@ -68,6 +70,7 @@ class LinuxDataProvider(BaseDataProvider):
     ) -> None:
         super().__init__(url)
         self._proc: subprocess.Popen | None = None
+        self._browser = "firefox"
 
     async def open(self) -> None:
         """
@@ -77,7 +80,7 @@ class LinuxDataProvider(BaseDataProvider):
         if self._opened:
             await self.close()
 
-        self._proc = subprocess.Popen(["chrome", "http://www.google.com"])
+        self._proc = subprocess.Popen([self._browser, self._url])  # nosec
         self._opened = True
 
     async def close(self) -> None:
@@ -86,6 +89,9 @@ class LinuxDataProvider(BaseDataProvider):
         """
 
         if self._opened:
+            if self._proc is None:
+                self._opened = False
+                return
             self._proc.terminate()
 
             _is_closed = asyncio.get_event_loop().run_in_executor(None, self._proc.wait)

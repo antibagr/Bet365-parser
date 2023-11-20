@@ -6,7 +6,7 @@ import aiofiles
 from loguru import logger
 
 from app.dto.entities.event import Event
-from app.dto.entities.sport import AnySport
+from app.dto.entities.sport import Sport
 from app.repository.db.in_memory import InMemoryDB
 
 
@@ -18,7 +18,7 @@ class JsonDB(InMemoryDB):
         self._json_db_path = json_db_path
 
     async def save(self) -> None:
-        sports: list[AnySport] = list((await self.get_sports()).values())
+        sports: list[Sport] = list((await self.get_sports()).values())
         events: list[Event] = list((await self.get_events()).values())
         serializable = {
             event.id or uuid.uuid4().hex: json.loads(event.model_dump_json(exclude_none=True))

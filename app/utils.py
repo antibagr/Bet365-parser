@@ -18,10 +18,6 @@ def setup_logging() -> None:
     )
 
 
-def get_esport_id(sport_id: str) -> str:
-    return f"x{sport_id}"
-
-
 def fractional_odds_to_decimal(odds: str) -> float:
     if "/" not in odds:
         raise ValueError(f"Invalid odds: {odds}")

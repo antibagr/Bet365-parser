@@ -21,10 +21,9 @@ def coro(f: t.Callable[P, T]) -> t.Callable[P, T]:
     @wraps(f)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
         logger.info("run_cmd", command=f.__name__)
-        asyncio.new_event_loop().run_until_complete(
+        return asyncio.new_event_loop().run_until_complete(
             t.cast(t.Coroutine[t.Any, t.Any, T], f(*args, **kwargs))
         )
-        # return asyncio.run(t.cast(t.Coroutine[t.Any, t.Any, T], f(*args, **kwargs)))
 
     return wrapper
 
