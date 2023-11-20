@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "bet365-parser"
+name = "app"
 version = "0.0.1"
 description = "Bet365 Asynchronous distributed python parser"
 authors = ["Anthony Bagrianov <rudiemeant@gmail.com>"]
@@ -13,6 +13,7 @@ uvloop = {version = "0.19.0", markers = "sys_platform == 'linux' or sys_platform
 pydantic = "2.4.2"
 loguru = "0.7.2"
 attrs = "23.1.0"
+click = "^8.1.7"
 
 [tool.poetry.group.db-json.dependencies]
 aiofiles = "23.2.1"
