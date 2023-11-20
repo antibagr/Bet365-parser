@@ -1,3 +1,3 @@
 #!/bin/bash
 
-exec "$@"
+poetry run python -m app.cmd run-parsers

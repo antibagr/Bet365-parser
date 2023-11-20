@@ -1,1 +1,19 @@
-version: "3.9"
+version: '3.9'
+
+services:
+  bet365:
+    container_name: bet365-app
+    image: bet365
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    env_file:
+      - .env
+    command: poetry run python -m app.cmd run-parsers
+
+  tshark:
+    container_name: toendeavour/tshark
+    image: tshark
+    networks:
+      - host
+    command: tshark -i eth0 -f "tcp port 443" -T ek -l
